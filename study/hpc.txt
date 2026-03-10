@@ -1,0 +1,6 @@
+Usar Add e Multiply mas evitar dividir sqrt e funções trigonometricas
+
+Usar offsets positivos
+Referencias futuras sao permitidas mas passadas proibem vetorização
+
+Gather/Scatter method
