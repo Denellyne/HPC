@@ -8,7 +8,7 @@ EnergyReadings::EnergyReadings(const unsigned long long size) {
 #pragma omp parallel
   {
     std::random_device rd;
-    std::mt19937 gen(rd() ^ omp_get_thread_num());
+    std::mt19937 gen(rd() + omp_get_thread_num());
     std::uniform_real_distribution<float> day(4.0f, 25.0f);
     std::uniform_real_distribution<float> night(0.0f, 6.0f);
 
@@ -43,10 +43,10 @@ double EnergyReadings::calculate_mean() {
 double EnergyReadings::calculate_variance() {
   double sum = 0;
   const __m256 meanVec = _mm256_set1_ps(static_cast<float>(this->mean));
+  __m256 resultVec = _mm256_setzero_ps();
 
-#pragma omp parallel
+#pragma omp parallel firstprivate(resultVec)
   {
-    __m256 resultVec = _mm256_setzero_ps();
 #pragma omp for reduction(+ : sum)
     for (const auto &entry : this->data) {
       __m256 v1 = _mm256_sub_ps(_mm256_load_ps(&entry.data[0]), meanVec);
@@ -63,29 +63,25 @@ double EnergyReadings::calculate_variance() {
 
     __m128 low = _mm_add_ps(low, _mm256_castps256_ps128(resultVec));
 
-#pragma omp critical
-    {
+    const __m128 high = _mm256_extractf128_ps(resultVec, 1);
 
-      const __m128 high = _mm256_extractf128_ps(resultVec, 1);
-
-      low = _mm_add_ps(low, high);
-      __m128 odd = _mm_movehdup_ps(low);
-      __m128 sums = _mm_add_ps(low, odd);
-      odd = _mm_movehl_ps(odd, sums);
-      sums = _mm_add_ss(sums, odd);
-      sum += _mm_cvtss_f32(sums);
-    }
+    low = _mm_add_ps(low, high);
+    __m128 odd = _mm_movehdup_ps(low);
+    __m128 sums = _mm_add_ps(low, odd);
+    odd = _mm_movehl_ps(odd, sums);
+    sums = _mm_add_ss(sums, odd);
+    sum += _mm_cvtss_f32(sums);
   }
   return sum / (this->data.size() * ARRSIZE);
 }
 
 std::array<float, ARRSIZE> EnergyReadings::calculate_aggregate() {
   alignas(32) std::array<float, ARRSIZE> sum{};
-#pragma omp parallel
+  __m256 v1 = _mm256_setzero_ps();
+  __m256 v2 = _mm256_setzero_ps();
+  __m256 v3 = _mm256_setzero_ps();
+#pragma omp parallel firstprivate(v1, v2, v3)
   {
-    __m256 v1 = _mm256_setzero_ps();
-    __m256 v2 = _mm256_setzero_ps();
-    __m256 v3 = _mm256_setzero_ps();
 
 #pragma omp for
     for (const auto &entry : this->data) {
