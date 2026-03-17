@@ -1,6 +1,6 @@
 #include "EnergyReadings/EnergyReadings.h"
 
-constexpr unsigned long long SIZE = 1e7;
+constexpr unsigned long long SIZE = 1e6;
 
 int main(void) {
   EnergyReadings readings = EnergyReadings(SIZE);

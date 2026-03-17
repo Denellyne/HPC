@@ -1,5 +1,5 @@
 #include "EnergyReadings.h"
-#include <immintrin.h>
+#include <iostream>
 #include <omp.h>
 
 EnergyReadings::EnergyReadings(const unsigned long long size) {
@@ -40,7 +40,7 @@ EnergyReadings::EnergyReadings(const unsigned long long size) {
       this->consumers[i].type = type;
       this->consumers[i].house = house;
       this->consumers[i].solar = (isProducer < 15);
-      this->consumers[i].setData(gen, solarCurve);
+      this->consumers[i].setData(gen, distParams, solarCurve);
 
 #pragma omp atomic
       this->clusters[(int)type]++;
@@ -139,7 +139,7 @@ bool EnergyReadings::simulate() {
 
 #pragma omp for
     for (size_t i = 0; i < this->consumers.size(); i++)
-      this->consumers[i].updateData(gen, solarCurve);
+      this->consumers[i].updateData(gen, distParams, solarCurve);
   }
 
   for (size_t i = 0; i < 24; i++) {
