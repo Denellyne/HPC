@@ -3,47 +3,59 @@
 #include <omp.h>
 
 EnergyReadings::EnergyReadings(const unsigned long long size) {
+
+#if SIZE > MAXSTACKARR
+  consumers.resize(size);
+#endif
+
   this->battery = size * 3.0;
   for (int i = 0; i < HOURS; i++) {
     if (i >= 17 && i <= 21)
       this->gridCapacity[i] = (24.8f * size) / 24.f;
     else
-      this->gridCapacity[i] = (14.0f * size) / 24.f;
+      this->gridCapacity[i] = (15.0f * size) / 24.f;
   }
-  this->consumers.resize(size);
 
 #pragma omp parallel
   {
-    std::random_device rd{};
-    std::mt19937 gen(rd() ^ omp_get_thread_num());
+    static std::random_device rd{};
+    thread_local std::mt19937_64 gen(rd() ^ omp_get_thread_num());
     std::uniform_int_distribution<int> dist(0, 4999);
     std::uniform_int_distribution<int> producer(0, 49);
 
 #pragma omp for
     for (size_t i = 0; i < size; i++) {
-      ConsumerClass type = ConsumerClass::Day;
+      unsigned type = 0;
+      unsigned house = 0;
+
       int r = dist(gen);
+
       if (r < 1200)
-        type = ConsumerClass::Night;
+        type = NIGHT;
       else
-        type = ConsumerClass::Day;
-      HouseholdClass house = HouseholdClass::Medium;
+        type = DAY;
       r = dist(gen);
       if (r < 300)
-        house = HouseholdClass::High;
+        house = HIGH;
       else if (r < 1200)
-        house = HouseholdClass::Small;
+        house = SMALL;
       else
-        house = HouseholdClass::Medium;
+        house = MEDIUM;
 
       int isProducer = producer(gen);
-      this->consumers[i].type = type;
-      this->consumers[i].house = house;
-      this->consumers[i].solar = (isProducer < 15);
+      if (isProducer < 15)
+        this->consumers[i].flags |= SOLAR;
+      this->consumers[i].flags |= type;
+      this->consumers[i].flags |= house;
+
       this->consumers[i].setData(gen, distParams, solarCurve);
 
+      if (type == NIGHT)
 #pragma omp atomic
-      this->clusters[(int)type]++;
+        this->clusters[1]++;
+      else
+#pragma omp atomic
+        this->clusters[0]++;
     }
   }
 
@@ -51,19 +63,19 @@ EnergyReadings::EnergyReadings(const unsigned long long size) {
   this->variance = this->calculate_variance();
 }
 
-double EnergyReadings::calculate_sum() {
-  double result = 0;
+float EnergyReadings::calculate_sum() {
+  float result = 0;
 #pragma omp parallel for reduction(+ : result)
   for (const auto &entry : this->consumers)
     result += entry.mean();
   return result;
 }
-double EnergyReadings::calculate_mean() {
+float EnergyReadings::calculate_mean() {
   return this->calculate_sum() / this->consumers.size();
 }
-double EnergyReadings::calculate_variance() {
-  double sum = 0;
-  const __m256 meanVec = _mm256_set1_ps(static_cast<float>(this->mean));
+float EnergyReadings::calculate_variance() {
+  float sum = 0;
+  const __m256 meanVec = _mm256_set1_ps(this->mean);
   __m256 resultVec = _mm256_setzero_ps();
 
 #pragma omp parallel firstprivate(resultVec) reduction(+ : sum)
@@ -93,7 +105,7 @@ double EnergyReadings::calculate_variance() {
     sums = _mm_add_ss(sums, odd);
     sum += _mm_cvtss_f32(sums);
   }
-  return sum / (this->consumers.size() * HOURS);
+  return sum / ((float)this->consumers.size() * (float)HOURS);
 }
 
 std::array<float, HOURS> EnergyReadings::calculate_aggregate() {
@@ -134,12 +146,12 @@ bool EnergyReadings::simulate() {
 
 #pragma omp parallel
   {
-    std::random_device rd{};
-    std::mt19937 gen(rd() ^ omp_get_thread_num());
+    static std::random_device rd{};
+    thread_local std::mt19937_64 gen(rd() ^ omp_get_thread_num());
 
 #pragma omp for
     for (size_t i = 0; i < this->consumers.size(); i++)
-      this->consumers[i].updateData(gen, distParams, solarCurve);
+      this->consumers[i].updateData(gen, distParams, solarCurve, price);
   }
 
   for (size_t i = 0; i < 24; i++) {
@@ -164,6 +176,7 @@ bool EnergyReadings::simulate() {
       }
     } else
       battery += grid;
+
     this->battery = std::fmin(battery, this->consumers.size() * 5.0f);
   }
 
