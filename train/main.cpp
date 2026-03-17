@@ -1,4 +1,5 @@
 #include "EnergyReadings/EnergyReadings.h"
+#include <iostream>
 
 constexpr unsigned long long SIZE = 1e6;
 

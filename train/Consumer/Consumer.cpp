@@ -1,8 +1,9 @@
 #include "Consumer.h"
 
-void Consumer::setData(std::mt19937 &gen,
-                       const std::array<LogNormalParams, HOURS> &distParams,
-                       const std::array<float, SOLARHOURS> &solarCurve) {
+void Consumer::setData(
+    std::mt19937 &gen,
+    const std::array<const LogNormalParams, HOURS> &distParams,
+    const std::array<float, SOLARHOURS> &solarCurve) {
   int idx = 0;
   float multiplier = 0.f;
   switch (this->type) {
@@ -48,9 +49,10 @@ void Consumer::setData(std::mt19937 &gen,
 
   sum = calculate_sum();
 }
-void Consumer::updateData(std::mt19937 &gen,
-                          const std::array<LogNormalParams, HOURS> &distParams,
-                          const std::array<float, SOLARHOURS> &solarCurve) {
+void Consumer::updateData(
+    std::mt19937 &gen,
+    const std::array<const LogNormalParams, HOURS> &distParams,
+    const std::array<float, SOLARHOURS> &solarCurve) {
   int idx = 0;
   float multiplier = 0.f;
   switch (this->type) {
