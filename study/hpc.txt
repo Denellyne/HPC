@@ -4,3 +4,37 @@ Usar offsets positivos
 Referencias futuras sao permitidas mas passadas proibem vetorização
 
 Gather/Scatter method
+
+Paralelização via OpenMP
+Explicar schedulings e como usar efetivamente com C++
+Explicar ccNUMA e como difere de UMA
+  -Locality Domain
+
+SIMD vs MIMD
+
+Message Passing Interface
+
+
+https://prdrklaina.weebly.com/uploads/5/7/7/3/5773421/introduction_to_high_performance_computing_for_scientists_and_engineers.pdf
+
+
+Demand-Research  programs
+Time/Price based or incentive-based
+Time-Based program podem permitir a existencia de eventos nas quais o preço de energia durante o evento sao mais elevados incentivando consumidores a gastar menos energia durante esse evento 
+Tais eventos no entanto devem ser usados apenas em casos extremos como em aumentos extremos de energia ou establididade da rede eletrica
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Resolução usada foi de 1 hora
+
+É util dividir o consumo entre Verão e Inverno devido a uma alta variação do consumo entre estas duas estações
+Alguns pesquisadores tambem ignoram o consumo diferencial entre feriados/fim de semana e os outros dias
+
+Normalizar o consumo diario pelo consumo total permite agregar casas de baixo consumo com de alto consumo e aplicar as mesmas inferencias
+
+Podemos usar tecnicas de clustering para aplicar diferentes preços e dicas por cluster assim aumentando profits e diminuindo consumo total da rede.
+Se soubermos que certos clusters de baixo consumo consistentemente tem alto consumo num certo periodo de tempo entao podemos tentar penalizar clusters de alto consumo consistente nestes periodos para 
+ajudar a establididade da rede
+
+Podera tambem ser util criar clusters de clusters para analize mais geral
+
+https://www.sciencedirect.com/science/article/pii/S235246772300142X

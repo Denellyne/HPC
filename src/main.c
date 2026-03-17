@@ -9,13 +9,13 @@
 
 int main(int argc, char *argv[]) {
 
-  // printf("Calculating GFLOPS Stack:%f\n", get_GFLOPS_Stack(NSTACK, R));
-  // printf("Calculating GFLOPS Stack Vectorized:%f\n",
-  //        get_GFLOPS_Stack_Vec(NSTACK, R));
-  // printf("Calculating GFLOPS Stack Intrinsics Vectorized:%f\n",
-  //        get_GFLOPS_Stack_Vec_SIMD(NSTACK, R));
-  // printf("Calculating GFLOPS:%f\n", get_GFLOPS(NSTACK, R));
-  // printf("Calculating GFLOPS Vectorized:%f\n", get_GFLOPS_Vec(NSTACK, R));
+  printf("Calculating GFLOPS Stack:%f\n", get_GFLOPS_Stack(NSTACK, R));
+  printf("Calculating GFLOPS Stack Vectorized:%f\n",
+         get_GFLOPS_Stack_Vec(NSTACK, R));
+  printf("Calculating GFLOPS Stack Intrinsics Vectorized:%f\n",
+         get_GFLOPS_Stack_Vec_SIMD(NSTACK, R));
+  printf("Calculating GFLOPS:%f\n", get_GFLOPS(NSTACK, R));
+  printf("Calculating GFLOPS Vectorized:%f\n", get_GFLOPS_Vec(NSTACK, R));
   printf("Calculating GFLOPS for Matrix Multiply Naive:%f\n",
          get_gflops_matrix_naive(MATRIX_N, R));
   printf("Calculating GFLOPS for Matrix Multiply:%f\n",

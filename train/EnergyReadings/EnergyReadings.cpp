@@ -3,28 +3,47 @@
 #include <omp.h>
 
 EnergyReadings::EnergyReadings(const unsigned long long size) {
-  this->data.resize(size);
+  this->battery = size * 3.0;
+  for (int i = 0; i < HOURS; i++) {
+    if (i >= 17 && i <= 21)
+      this->gridCapacity[i] = (24.8f * size) / 24.f;
+    else
+      this->gridCapacity[i] = (14.0f * size) / 24.f;
+  }
+  this->consumers.resize(size);
 
 #pragma omp parallel
   {
-    std::random_device rd;
-    std::mt19937 gen(rd() + omp_get_thread_num());
-    std::uniform_real_distribution<float> day(4.0f, 25.0f);
-    std::uniform_real_distribution<float> night(0.0f, 6.0f);
+    std::random_device rd{};
+    std::mt19937 gen(rd() ^ omp_get_thread_num());
+    std::uniform_int_distribution<int> dist(0, 4999);
+    std::uniform_int_distribution<int> producer(0, 49);
 
-    std::array<float, ARRSIZE> data;
 #pragma omp for
     for (int i = 0; i < size; i++) {
+      ConsumerClass type = ConsumerClass::Day;
+      int r = dist(gen);
+      if (r < 1200)
+        type = ConsumerClass::Night;
+      else
+        type = ConsumerClass::Day;
+      HouseholdClass house = HouseholdClass::Medium;
+      r = dist(gen);
+      if (r < 300)
+        house = HouseholdClass::High;
+      else if (r < 1200)
+        house = HouseholdClass::Small;
+      else
+        house = HouseholdClass::Medium;
 
-      for (int j = 0; j < 6; j++) {
-        data[j] = night(gen);
-        data[j + 18] = night(gen);
-      }
+      int isProducer = producer(gen);
+      this->consumers[i].type = type;
+      this->consumers[i].house = house;
+      this->consumers[i].solar = (isProducer < 15);
+      this->consumers[i].setData(gen, consumption, varianceFactor, solarCurve);
 
-      for (int j = 6; j < 19; j++)
-        data[j] = day(gen);
-
-      this->data[i].data = data;
+#pragma omp atomic
+      this->clusters[(int)type]++;
     }
   }
 
@@ -32,23 +51,25 @@ EnergyReadings::EnergyReadings(const unsigned long long size) {
   this->variance = this->calculate_variance();
 }
 
-double EnergyReadings::calculate_mean() {
+double EnergyReadings::calculate_sum() {
   double result = 0;
 #pragma omp parallel for reduction(+ : result)
-  for (const auto &entry : this->data)
+  for (const auto &entry : this->consumers)
     result += entry.mean();
-
-  return result / this->data.size();
+  return result;
+}
+double EnergyReadings::calculate_mean() {
+  return this->calculate_sum() / this->consumers.size();
 }
 double EnergyReadings::calculate_variance() {
   double sum = 0;
   const __m256 meanVec = _mm256_set1_ps(static_cast<float>(this->mean));
   __m256 resultVec = _mm256_setzero_ps();
 
-#pragma omp parallel firstprivate(resultVec)
+#pragma omp parallel firstprivate(resultVec) reduction(+ : sum)
   {
-#pragma omp for reduction(+ : sum)
-    for (const auto &entry : this->data) {
+#pragma omp for
+    for (const auto &entry : this->consumers) {
       __m256 v1 = _mm256_sub_ps(_mm256_load_ps(&entry.data[0]), meanVec);
       __m256 v2 = _mm256_sub_ps(_mm256_load_ps(&entry.data[8]), meanVec);
       __m256 v3 = _mm256_sub_ps(_mm256_load_ps(&entry.data[16]), meanVec);
@@ -61,7 +82,7 @@ double EnergyReadings::calculate_variance() {
           _mm256_add_ps(resultVec, _mm256_add_ps(v1, _mm256_add_ps(v2, v3)));
     }
 
-    __m128 low = _mm_add_ps(low, _mm256_castps256_ps128(resultVec));
+    __m128 low = _mm256_castps256_ps128(resultVec);
 
     const __m128 high = _mm256_extractf128_ps(resultVec, 1);
 
@@ -72,11 +93,11 @@ double EnergyReadings::calculate_variance() {
     sums = _mm_add_ss(sums, odd);
     sum += _mm_cvtss_f32(sums);
   }
-  return sum / (this->data.size() * ARRSIZE);
+  return sum / (this->consumers.size() * HOURS);
 }
 
-std::array<float, ARRSIZE> EnergyReadings::calculate_aggregate() {
-  alignas(32) std::array<float, ARRSIZE> sum{};
+std::array<float, HOURS> EnergyReadings::calculate_aggregate() {
+  alignas(32) std::array<float, HOURS> sum{};
   __m256 v1 = _mm256_setzero_ps();
   __m256 v2 = _mm256_setzero_ps();
   __m256 v3 = _mm256_setzero_ps();
@@ -84,7 +105,7 @@ std::array<float, ARRSIZE> EnergyReadings::calculate_aggregate() {
   {
 
 #pragma omp for
-    for (const auto &entry : this->data) {
+    for (const auto &entry : this->consumers) {
       v1 = _mm256_add_ps(v1, _mm256_load_ps(&entry.data[0]));
       v2 = _mm256_add_ps(v2, _mm256_load_ps(&entry.data[8]));
       v3 = _mm256_add_ps(v3, _mm256_load_ps(&entry.data[16]));
@@ -107,4 +128,48 @@ std::array<float, ARRSIZE> EnergyReadings::calculate_aggregate() {
     }
   }
   return sum;
+}
+
+bool EnergyReadings::simulate() {
+
+#pragma omp parallel
+  {
+    std::random_device rd{};
+    std::mt19937 gen(rd() ^ omp_get_thread_num());
+
+#pragma omp for
+    for (size_t i = 0; i < this->consumers.size(); i++)
+      this->consumers[i].updateData(gen, consumption, varianceFactor,
+                                    solarCurve);
+  }
+
+  for (size_t i = 0; i < 24; i++) {
+    float grid = this->gridCapacity[i];
+    float battery = this->battery;
+#pragma omp parallel for reduction(+ : grid, battery)
+    for (size_t j = 0; j < this->consumers.size(); j++) {
+      if (this->consumers[j].data[i] < 0.f) {
+        battery -= this->consumers[j].data[i];
+        this->consumers[j].data[i] = 0.f;
+        continue;
+      }
+      grid -= consumers[j].data[i];
+    }
+    if (grid < 0.f) {
+      if (battery >= -grid)
+        battery += grid;
+      else {
+        std::cout << "Grid failure at hour " << i + 1 << '\n';
+        std::cout << "Battery: " << battery << " Grid: " << grid << '\n';
+        return false;
+      }
+    } else
+      battery += grid;
+    this->battery = std::fmin(battery, this->consumers.size() * 5.0f);
+  }
+
+  this->mean = this->calculate_mean();
+  this->variance = this->calculate_variance();
+
+  return true;
 }
