@@ -1,8 +1,8 @@
 #include "EnergyReadings/EnergyReadings.h"
 
-constexpr unsigned long long SIZE = 1e6;
+constexpr unsigned long long SIZE = 1e7;
 
-int main(int argc, char *argv[]) {
+int main(void) {
   EnergyReadings readings = EnergyReadings(SIZE);
   do {
     printf("\nBattery: %fMWh\n", readings.battery / 1000);

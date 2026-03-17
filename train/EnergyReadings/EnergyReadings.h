@@ -40,8 +40,6 @@ private:
     long double sum;
     float mean() const { return sum / HOURS; }
     void setData(std::mt19937 &gen,
-                 const std::array<float, HOURS> &consumptions,
-                 const std::array<float, HOURS> &varianceFactor,
                  const std::array<float, SOLARHOURS> &solarCurve) {
       int idx = 0;
       float multiplier = 0.f;
@@ -67,28 +65,28 @@ private:
       }
 
       for (int i = 0; i < HOURS; i++) {
-        const long double mean = consumptions[idx % HOURS];
-        const long double sigma = mean * varianceFactor[idx % HOURS];
-        const long double mu =
-            std::logl((mean * mean) / std::sqrtl(sigma * sigma + mean * mean));
-        const long double s =
-            std::sqrtl(std::logl(1.l + (sigma * sigma) / (mean * mean)));
+        const auto &[mu, s] = distParams[idx % HOURS];
 
         std::lognormal_distribution<long double> dist(mu, s);
 
         data[i] = dist(gen) * multiplier;
         idx++;
       }
-      constexpr float scalingFactor = SOLARPRODUCES / 5.6f;
-      if (solar)
-        for (int i = 7; i < 19; i++)
-          data[i] -= solarCurve[i - 7] * scalingFactor;
+      constexpr float scalingFactor = -SOLARPRODUCES / 5.6f;
+      if (solar) {
+        __m256 vec256 = _mm256_set1_ps(scalingFactor);
+        __m128 vec128 = _mm_set1_ps(scalingFactor);
+        vec256 = _mm256_mul_ps(vec256, _mm256_load_ps(&solarCurve[0]));
+        vec128 = _mm_mul_ps(vec128, _mm_load_ps(&solarCurve[8]));
+        const __m256 data256 = _mm256_add_ps(vec256, _mm256_load_ps(&data[6]));
+        const __m128 data128 = _mm_add_ps(vec128, _mm_load_ps(&data[14]));
+        _mm256_storeu_ps(&data[6], data256);
+        _mm_storeu_ps(&data[14], data128);
+      }
 
       sum = calculate_sum();
     }
     void updateData(std::mt19937 &gen,
-                    const std::array<float, HOURS> &consumptions,
-                    const std::array<float, HOURS> &varianceFactor,
                     const std::array<float, SOLARHOURS> &solarCurve) {
       int idx = 0;
       float multiplier = 0.f;
@@ -114,22 +112,24 @@ private:
       }
 
       for (int i = 0; i < HOURS; i++) {
-        const long double mean = consumptions[idx % HOURS];
-        const long double sigma = mean * varianceFactor[idx % HOURS];
-        const long double mu =
-            std::logl((mean * mean) / std::sqrtl(sigma * sigma + mean * mean));
-        const long double s =
-            std::sqrtl(std::logl(1.l + (sigma * sigma) / (mean * mean)));
-
+        const auto &[mu, s] = distParams[idx % HOURS];
         std::lognormal_distribution<long double> dist(mu, s);
 
         data[i] = (0.6f * data[i]) + (0.4f * (dist(gen) * multiplier));
         idx++;
       }
-      constexpr float scalingFactor = SOLARPRODUCES / 5.6f;
-      if (solar)
-        for (int i = 7; i < 19; i++)
-          data[i] -= solarCurve[i - 7] * scalingFactor;
+
+      constexpr float scalingFactor = -SOLARPRODUCES / 5.6f;
+      if (solar) {
+        __m256 vec256 = _mm256_set1_ps(scalingFactor);
+        __m128 vec128 = _mm_set1_ps(scalingFactor);
+        vec256 = _mm256_mul_ps(vec256, _mm256_load_ps(&solarCurve[0]));
+        vec128 = _mm_mul_ps(vec128, _mm_load_ps(&solarCurve[8]));
+        const __m256 data256 = _mm256_add_ps(vec256, _mm256_load_ps(&data[6]));
+        const __m128 data128 = _mm_add_ps(vec128, _mm_load_ps(&data[14]));
+        _mm256_storeu_ps(&data[6], data256);
+        _mm_storeu_ps(&data[14], data128);
+      }
 
       sum = calculate_sum();
     }
@@ -160,7 +160,7 @@ public:
   long double mean;
   long double variance;
   float battery;
-  std::array<float, HOURS> gridCapacity;
+  alignas(32) std::array<float, HOURS> gridCapacity;
   double calculate_sum();
 
 private:
@@ -174,7 +174,24 @@ private:
       0.05, 0.05, 0.05, 0.05, 0.08, 0.10, 0.20, 0.25, 0.20, 0.15, 0.15, 0.15,
       0.15, 0.15, 0.15, 0.20, 0.35, 0.40, 0.45, 0.40, 0.30, 0.25, 0.15,
   };
-  static constexpr std::array<float, SOLARHOURS> solarCurve = {
+  alignas(32) static constexpr std::array<float, SOLARHOURS> solarCurve = {
       0.05f, 0.15f, 0.40f, 0.70f, 0.90f, 1.00f,
       0.95f, 0.75f, 0.45f, 0.20f, 0.05f, 0.00f};
+  struct LogNormalParams {
+    long double mu;
+    long double s;
+  };
+  static const inline std::array<LogNormalParams, HOURS> distParams = []() {
+    std::array<LogNormalParams, HOURS> params{};
+    for (int i = 0; i < HOURS; ++i) {
+      const long double mean = consumption[i];
+      const long double sigma = mean * varianceFactor[i];
+
+      params[i].mu =
+          std::logl((mean * mean) / std::sqrtl(sigma * sigma + mean * mean));
+      params[i].s =
+          std::sqrtl(std::logl(1.l + (sigma * sigma) / (mean * mean)));
+    }
+    return params;
+  }();
 };

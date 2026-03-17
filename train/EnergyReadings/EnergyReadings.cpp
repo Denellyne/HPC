@@ -20,7 +20,7 @@ EnergyReadings::EnergyReadings(const unsigned long long size) {
     std::uniform_int_distribution<int> producer(0, 49);
 
 #pragma omp for
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
       ConsumerClass type = ConsumerClass::Day;
       int r = dist(gen);
       if (r < 1200)
@@ -40,7 +40,7 @@ EnergyReadings::EnergyReadings(const unsigned long long size) {
       this->consumers[i].type = type;
       this->consumers[i].house = house;
       this->consumers[i].solar = (isProducer < 15);
-      this->consumers[i].setData(gen, consumption, varianceFactor, solarCurve);
+      this->consumers[i].setData(gen, solarCurve);
 
 #pragma omp atomic
       this->clusters[(int)type]++;
@@ -139,8 +139,7 @@ bool EnergyReadings::simulate() {
 
 #pragma omp for
     for (size_t i = 0; i < this->consumers.size(); i++)
-      this->consumers[i].updateData(gen, consumption, varianceFactor,
-                                    solarCurve);
+      this->consumers[i].updateData(gen, solarCurve);
   }
 
   for (size_t i = 0; i < 24; i++) {
